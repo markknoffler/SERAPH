@@ -1,0 +1,1 @@
+from .prior_adapted_gaussians import PriorAdaptedGaussianFields
