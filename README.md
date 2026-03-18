@@ -20,7 +20,7 @@ pip install openxlab timm einops torch torchvision tqdm pillow numpy
 ### 2. Automated Training (Mill 19)
 The system is fully automated. To download the dataset and begin training on a specific scene, run:
 ```bash
-python src/train.py --download --scene rubble
+python train.py --download --scene rubble
 ```
 
 ---
