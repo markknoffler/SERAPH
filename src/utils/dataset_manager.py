@@ -119,46 +119,43 @@ class Mill19DatasetManager:
         
         # First, check for any nested archives that need extraction
         # Avoid recursion loops by checking if we've already extracted them
-        archives_to_extract = []
         for root, dirs, files in os.walk(self.root_dir):
             for f in files:
                 if f.endswith(('.tgz', '.tar.gz')) and f != "Mill_19.tar.gz":
-                    archives_to_extract.append(os.path.join(root, f))
-        
-        for archive_path in archives_to_extract:
-            print(f"Found nested archive: {archive_path}. Extracting...")
-            self.extract_archive(archive_path, recursive=False)
+                    archive_path = os.path.join(root, f)
+                    # Determine scene name from archive file
+                    scene_name = f.split("-")[0]
+                    if scene_name in self.SCENES:
+                        scene_dest = os.path.join(self.root_dir, scene_name)
+                        if not os.path.exists(os.path.join(scene_dest, "train", "rgbs")):
+                            print(f"Found nested archive for {scene_name}: {archive_path}. Extracting to {scene_dest}...")
+                            os.makedirs(scene_dest, exist_ok=True)
+                            self.extract_to(archive_path, scene_dest)
 
-        found_any = False
-        for scene in self.SCENES:
-            # Search for scene folder in all extracted subfolders
-            # Logic: match if folder name starts with scene name (to catch 'rubble-pixsfm' as 'rubble')
-            for root, dirs, files in os.walk(self.root_dir):
-                for d in dirs:
-                    if d.startswith(scene):
-                        src = os.path.join(root, d)
-                        dst = os.path.join(self.root_dir, scene)
-                        if src != dst:
-                            print(f"Found match for {scene} at {src}. Moving to {dst}...")
-                            try:
-                                if os.path.exists(dst):
-                                    shutil.rmtree(dst)
-                                shutil.move(src, dst)
-                                print(f"Successfully moved {scene}.")
-                                found_any = True
-                            except Exception as e:
-                                print(f"Error moving {scene}: {e}")
-                        else:
-                            # Already at destination, but might be named 'rubble-pixsfm'
-                            if d != scene:
-                                target = os.path.join(self.root_dir, scene)
-                                try:
-                                    os.rename(src, target)
-                                except:
-                                    pass
-                            found_any = True
-                        break # Found this scene
-                if found_any: break
+    def extract_to(self, archive_path, dest_dir):
+        import tarfile
+        try:
+            with tarfile.open(archive_path, 'r:*') as tar:
+                tar.extractall(path=dest_dir)
+            print(f"Extracted {os.path.basename(archive_path)} to {dest_dir}.")
+        except Exception as e:
+            print(f"Failed to extract {archive_path}: {e}")
+
+    def extract_archive(self, path):
+        import tarfile
+        print(f"Extracting {path} to {self.root_dir}...")
+        try:
+            # Extract everything to root_dir
+            with tarfile.open(path, 'r:*') as tar:
+                tar.extractall(path=self.root_dir)
+            print(f"Extraction of {os.path.basename(path)} complete.")
+            
+            # If this is the main archive, normalize and look for nested ones
+            self._normalize_folders()
+            return True
+        except Exception as e:
+            print(f"Extraction failed for {path}: {e}")
+            return False
                     
         if not found_any:
             print("Warning: No scene folders found. Listing all directory content for debugging:")

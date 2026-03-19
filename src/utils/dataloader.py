@@ -24,13 +24,25 @@ class Mill19Dataset(Dataset):
         else:
             self.meta = {"image_path": "images"}
             
-        self.img_dir = os.path.join(self.root_dir, self.meta.get("image_path", "images"))
+        # Try several common image subfolders used in Mill 19 / MeGa-NeRF
+        possible_img_dirs = [
+            os.path.join(self.root_dir, "images"),
+            os.path.join(self.root_dir, "train", "rgbs"),
+            os.path.join(self.root_dir, "rgbs"),
+            os.path.join(self.root_dir, split, "rgbs")
+        ]
         
-        if os.path.exists(self.img_dir):
-            self.image_files = sorted([f for f in os.listdir(self.img_dir) if f.endswith(('.jpg', '.png'))])
+        self.img_dir = None
+        for d in possible_img_dirs:
+            if os.path.exists(d):
+                self.img_dir = d
+                break
+        
+        if self.img_dir:
+            self.image_files = sorted([f for f in os.listdir(self.img_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
         else:
             self.image_files = []
-            print(f"Warning: Image directory {self.img_dir} not found.")
+            print(f"Warning: No valid image directory found in {self.root_dir}. Tried: {possible_img_dirs}")
 
     def __len__(self):
         return len(self.image_files)
