@@ -104,40 +104,61 @@ class Mill19DatasetManager:
             self._normalize_folders()
             return True
         except Exception as e:
-            print(f"Extraction failed: {e}")
+            print(f"Extraction of {os.path.basename(path)} complete.")
+            if recursive:
+                self._normalize_folders()
+            return True
+        except Exception as e:
+            print(f"Extraction failed for {path}: {e}")
             return False
 
     def _normalize_folders(self):
         """
         Moves scene folders from subdirectories to the root data directory.
+        Now also handles nested .tgz files (e.g., rubble-pixsfm.tgz).
         """
         print(f"Normalizing folders in {self.root_dir}...")
+        
+        # First, check for any nested archives that need extraction
+        for root, dirs, files in os.walk(self.root_dir):
+            for f in files:
+                if f.endswith(('.tgz', '.tar.gz')) and f != "Mill_19.tar.gz":
+                    archive_path = os.path.join(root, f)
+                    print(f"Found nested archive: {archive_path}. Extracting...")
+                    self.extract_archive(archive_path, recursive=False)
+
         found_any = False
         for scene in self.SCENES:
             # Search for scene folder in all extracted subfolders
+            # Logic: match if folder name starts with scene name (to catch 'rubble-pixsfm' as 'rubble')
             for root, dirs, files in os.walk(self.root_dir):
-                if scene in dirs:
-                    src = os.path.join(root, scene)
-                    dst = os.path.join(self.root_dir, scene)
-                    if src != dst:
-                        print(f"Found {scene} at {src}. Moving to {dst}...")
-                        try:
-                            if os.path.exists(dst):
-                                shutil.rmtree(dst)
-                            shutil.move(src, dst)
-                            print(f"Successfully moved {scene}.")
+                for d in dirs:
+                    if d.startswith(scene):
+                        src = os.path.join(root, d)
+                        dst = os.path.join(self.root_dir, scene)
+                        if src != dst:
+                            print(f"Found match for {scene} at {src}. Moving to {dst}...")
+                            try:
+                                if os.path.exists(dst):
+                                    shutil.rmtree(dst)
+                                shutil.move(src, dst)
+                                print(f"Successfully moved {scene}.")
+                                found_any = True
+                            except Exception as e:
+                                print(f"Error moving {scene}: {e}")
+                        else:
+                            # Already at destination, but might be named 'rubble-pixsfm'
+                            if d != scene:
+                                target = os.path.join(self.root_dir, scene)
+                                os.rename(src, target)
                             found_any = True
-                        except Exception as e:
-                            print(f"Error moving {scene}: {e}")
-                    else:
-                        print(f"Scene {scene} already correctly located at {dst}.")
-                        found_any = True
-                    break # Found this scene, move to next
+                        break # Found this scene
+                if found_any: break
                     
         if not found_any:
             print("Warning: No scene folders found. Listing all directory content for debugging:")
             for root, dirs, files in os.walk(self.root_dir):
-                print(f"  Dir: {root} -> Subdirs: {dirs}")
+                print(f"  Dir: {root} -> Subdirs: {dirs} -> Files: {files[:5]}")
 
     def preprocess(self):
         """
@@ -151,22 +172,21 @@ class Mill19DatasetManager:
             if not os.path.exists(scene_dir):
                 continue
                 
-            # Check for images folder
-            img_dir = os.path.join(scene_dir, "images")
-            if not os.path.exists(img_dir):
-                # Check for alternative layouts (e.g., scene_dir itself containing images)
-                # or a sub-subfolder
+            # Check for images folder (Mill 19 often has it inside another subfolder)
+            img_target = os.path.join(scene_dir, "images")
+            if not os.path.exists(img_target):
                 for root, dirs, files in os.walk(scene_dir):
                     if "images" in dirs:
                         src = os.path.join(root, "images")
-                        print(f"Found images folder at {src}. Moving to {img_dir}")
-                        shutil.move(src, img_dir)
+                        print(f"Found images folder at {src}. Moving to {img_target}")
+                        if os.path.exists(img_target): shutil.rmtree(img_target)
+                        shutil.move(src, img_target)
                         break
             
             metadata_file = os.path.join(scene_dir, "metadata.json")
             if not os.path.exists(metadata_file):
-                if os.path.exists(img_dir):
-                    imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+                if os.path.exists(img_target):
+                    imgs = [f for f in os.listdir(img_target) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
                     if imgs:
                         print(f"Generating metadata for {scene}...")
                         meta = {
