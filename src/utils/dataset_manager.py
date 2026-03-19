@@ -48,23 +48,23 @@ class Mill19DatasetManager:
     def download_dataset(self, scenes=None):
         """
         Downloads requested scenes from Mill 19 repo.
-        Includes support for extracting .tar.gz archives.
+        Includes support for extracting .tar.gz archives from OpenXLab structure.
         """
         if scenes is None:
             scenes = self.SCENES
             
         os.makedirs(self.root_dir, exist_ok=True)
         
-        # Check if the tarball already exists (even if SDK failed later)
-        tar_path = os.path.join(self.root_dir, "Mill_19.tar.gz")
-        # SDK often downloads to a 'raw' or subfolder
-        raw_tar_path = os.path.join(self.root_dir, "raw", "Mill_19.tar.gz")
+        # OpenXLab often creates a subfolder based on the repo name
+        repo_subfolder = self.REPO.replace("/", "___") # OpenDataLab___Mill_19
+        search_paths = [
+            os.path.join(self.root_dir, "Mill_19.tar.gz"),
+            os.path.join(self.root_dir, "raw", "Mill_19.tar.gz"),
+            os.path.join(self.root_dir, repo_subfolder, "raw", "Mill_19.tar.gz"),
+            os.path.join(self.root_dir, repo_subfolder, "Mill_19.tar.gz")
+        ]
         
-        target_tar = None
-        if os.path.exists(tar_path):
-            target_tar = tar_path
-        elif os.path.exists(raw_tar_path):
-            target_tar = raw_tar_path
+        target_tar = next((p for p in search_paths if os.path.exists(p)), None)
             
         if target_tar:
             print(f"Found archive at {target_tar}. Attempting extraction...")
@@ -76,38 +76,61 @@ class Mill19DatasetManager:
             
         print(f"Requesting download of {self.REPO}...")
         try:
+            # Re-check paths after download attempt (in case of partial/background completion)
             get(dataset_repo=self.REPO, target_path=self.root_dir)
-            print(f"Successfully triggered download.")
-            # After download, check again for the tarball
-            if os.path.exists(raw_tar_path):
-                return self.extract_archive(raw_tar_path)
+            print(f"Download call returned.")
+            
+            # Search again
+            target_tar = next((p for p in search_paths if os.path.exists(p)), None)
+            if target_tar:
+                return self.extract_archive(target_tar)
         except Exception as e:
-            print(f"Download failed or timed out: {e}")
-            # Check if file exists anyway (SDK timeout but file present)
-            if os.path.exists(raw_tar_path):
-                print("File seems to be present regardless of timeout. Extracting...")
-                return self.extract_archive(raw_tar_path)
+            print(f"Download interaction log: {e}")
+            target_tar = next((p for p in search_paths if os.path.exists(p)), None)
+            if target_tar:
+                print("File is present despite error/timeout. Extracting...")
+                return self.extract_archive(target_tar)
             return False
         return True
 
     def extract_archive(self, path):
         import tarfile
-        print(f"Extracting {path} to {self.root_dir}... (This may take a while for 19GB)")
+        print(f"Extracting {path} to {self.root_dir}... (This may take a while)")
         try:
             with tarfile.open(path, 'r:gz') as tar:
                 tar.extractall(path=self.root_dir)
             print("Extraction complete.")
+            # Normalization: Move extracted folders to root_dir if they are nested
+            self._normalize_folders()
             return True
         except Exception as e:
             print(f"Extraction failed: {e}")
             return False
 
+    def _normalize_folders(self):
+        """
+        Moves scene folders from subdirectories to the root data directory.
+        """
+        for scene in self.SCENES:
+            # Search for scene folder in all extracted subfolders
+            for root, dirs, files in os.walk(self.root_dir):
+                if scene in dirs:
+                    src = os.path.join(root, scene)
+                    dst = os.path.join(self.root_dir, scene)
+                    if src != dst:
+                        print(f"Moving {scene} from {src} to {dst}")
+                        if os.path.exists(dst):
+                            shutil.rmtree(dst)
+                        shutil.move(src, dst)
+
     def preprocess(self):
         """
         Organizes the downloaded data into a consistent format for SERAPH.
-        Format: data/mill19/<scene>/[images, colmap_poses, metadata.json]
         """
         print("Preprocessing Mill 19 dataset...")
+        # Ensure folders are where they should be
+        self._normalize_folders()
+        
         for scene in self.SCENES:
             scene_dir = os.path.join(self.root_dir, scene)
             if not os.path.exists(scene_dir):
