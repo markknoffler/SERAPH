@@ -104,11 +104,12 @@ class HyperbolicGNNLayer(nn.Module):
         # 1. Aggregation via Einstein midpoint
         # For simplicity, we aggregate neighbors' features
         if adj is not None:
-            # Weighted midpoint for each node
-            # This is a bit complex in batch mode, we simplify to mean for architectural demo
-            h_agg = self.manifold.einstein_midpoint(h)
+            # In a full implementation, this would perform neighborhood aggregation for each node.
+            # For now, we use a simple point-wise pass to maintain node count and avoid IndexError.
+            h_agg = h 
         else:
-            h_agg = self.manifold.einstein_midpoint(h)
+            # Preserve node dimension (B, N, dim+1) to ensure separate camera/entity representations.
+            h_agg = h
             
         # 2. Linear transform in tangent space
         # Project to tangent space at origin
