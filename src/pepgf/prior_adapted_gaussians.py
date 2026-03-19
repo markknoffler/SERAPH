@@ -110,9 +110,10 @@ class PriorAdaptedGaussianFields(nn.Module):
         # In a real training script, these are initialized per scene
         self.adapters = nn.ModuleDict() 
 
-    def get_adapter(self, entity_id, num_points):
+    def get_adapter(self, entity_id, num_points, device):
         if entity_id not in self.adapters:
-            self.adapters[entity_id] = LocalResidualAdapter(num_points)
+            # Explicitly move new adapter to the same device as the model
+            self.adapters[entity_id] = LocalResidualAdapter(num_points).to(device)
         return self.adapters[entity_id]
 
     def forward(self, entity_features, class_labels, entity_ids=None):
@@ -140,7 +141,7 @@ class PriorAdaptedGaussianFields(nn.Module):
                  for i in range(N_ent):
                      # Unique ID for each entity in the world
                      eid = entity_ids[b][i]
-                     adapter = self.get_adapter(eid, self.gep.num_points)
+                     adapter = self.get_adapter(eid, self.gep.num_points, entity_features.device)
                      rm, rc, ro, rs = adapter()
                      b_mu.append(rm)
                      b_cov.append(rc)
