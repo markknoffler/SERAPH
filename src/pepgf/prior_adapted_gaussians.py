@@ -152,10 +152,16 @@ class PriorAdaptedGaussianFields(nn.Module):
                  res_op.append(torch.stack(b_op))
                  res_sh.append(torch.stack(b_sh))
              
-             final_mu = p_mu + torch.stack(res_mu)
-             final_cov = p_cov + torch.stack(res_cov)
-             final_op = p_op + torch.stack(res_op)
-             final_sh = p_sh + torch.stack(res_sh)
+             # Explicitly move to p_mu.device to ensure same-device operations
+             res_mu_tensor = torch.stack(res_mu).to(p_mu.device)
+             res_cov_tensor = torch.stack(res_cov).to(p_mu.device)
+             res_op_tensor = torch.stack(res_op).to(p_mu.device)
+             res_sh_tensor = torch.stack(res_sh).to(p_mu.device)
+             
+             final_mu = p_mu + res_mu_tensor
+             final_cov = p_cov + res_cov_tensor
+             final_op = p_op + res_op_tensor
+             final_sh = p_sh + res_sh_tensor
         else:
              final_mu, final_cov, final_op, final_sh = p_mu, p_cov, p_op, p_sh
 
