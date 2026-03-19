@@ -45,7 +45,7 @@ def train(args):
         'image_height': args.height,
         'image_width': args.width,
     }
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
     model = SERAPH(config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
@@ -133,6 +133,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SERAPH Training Script (Mill 19)")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--gpu", type=int, default=0, help="GPU ID to use (default: 0)")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--num_entities", type=int, default=50)
     parser.add_argument("--height", type=int, default=518)
