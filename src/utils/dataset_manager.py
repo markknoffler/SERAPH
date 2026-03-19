@@ -111,6 +111,8 @@ class Mill19DatasetManager:
         """
         Moves scene folders from subdirectories to the root data directory.
         """
+        print(f"Normalizing folders in {self.root_dir}...")
+        found_any = False
         for scene in self.SCENES:
             # Search for scene folder in all extracted subfolders
             for root, dirs, files in os.walk(self.root_dir):
@@ -118,17 +120,30 @@ class Mill19DatasetManager:
                     src = os.path.join(root, scene)
                     dst = os.path.join(self.root_dir, scene)
                     if src != dst:
-                        print(f"Moving {scene} from {src} to {dst}")
-                        if os.path.exists(dst):
-                            shutil.rmtree(dst)
-                        shutil.move(src, dst)
+                        print(f"Found {scene} at {src}. Moving to {dst}...")
+                        try:
+                            if os.path.exists(dst):
+                                shutil.rmtree(dst)
+                            shutil.move(src, dst)
+                            print(f"Successfully moved {scene}.")
+                            found_any = True
+                        except Exception as e:
+                            print(f"Error moving {scene}: {e}")
+                    else:
+                        print(f"Scene {scene} already correctly located at {dst}.")
+                        found_any = True
+                    break # Found this scene, move to next
+                    
+        if not found_any:
+            print("Warning: No scene folders found. Listing all directory content for debugging:")
+            for root, dirs, files in os.walk(self.root_dir):
+                print(f"  Dir: {root} -> Subdirs: {dirs}")
 
     def preprocess(self):
         """
         Organizes the downloaded data into a consistent format for SERAPH.
         """
         print("Preprocessing Mill 19 dataset...")
-        # Ensure folders are where they should be
         self._normalize_folders()
         
         for scene in self.SCENES:
@@ -136,25 +151,32 @@ class Mill19DatasetManager:
             if not os.path.exists(scene_dir):
                 continue
                 
-            # Example organization logic:
-            # 1. Look for images/ directory
-            # 2. Extract metadata if in a non-standard format
-            # 3. Create a unified dataset.json for the dataloader
+            # Check for images folder
+            img_dir = os.path.join(scene_dir, "images")
+            if not os.path.exists(img_dir):
+                # Check for alternative layouts (e.g., scene_dir itself containing images)
+                # or a sub-subfolder
+                for root, dirs, files in os.walk(scene_dir):
+                    if "images" in dirs:
+                        src = os.path.join(root, "images")
+                        print(f"Found images folder at {src}. Moving to {img_dir}")
+                        shutil.move(src, img_dir)
+                        break
             
             metadata_file = os.path.join(scene_dir, "metadata.json")
             if not os.path.exists(metadata_file):
-                # Create a simple metadata file if missing
-                img_dir = os.path.join(scene_dir, "images")
                 if os.path.exists(img_dir):
-                    imgs = [f for f in os.listdir(img_dir) if f.endswith(('.jpg', '.png'))]
-                    meta = {
-                        "scene": scene,
-                        "num_images": len(imgs),
-                        "image_path": "images",
-                        "intrinsic": [500.0, 500.0, self._get_img_size(os.path.join(img_dir, imgs[0]))] if imgs else None
-                    }
-                    with open(metadata_file, 'w') as f:
-                        json.dump(meta, f, indent=4)
+                    imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+                    if imgs:
+                        print(f"Generating metadata for {scene}...")
+                        meta = {
+                            "scene": scene,
+                            "num_images": len(imgs),
+                            "image_path": "images",
+                            "intrinsic": [500.0, 500.0, self._get_img_size(os.path.join(img_dir, imgs[0]))]
+                        }
+                        with open(metadata_file, 'w') as f:
+                            json.dump(meta, f, indent=4)
                         
         print("Preprocessing complete.")
 
