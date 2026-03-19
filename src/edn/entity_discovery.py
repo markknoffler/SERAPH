@@ -8,7 +8,7 @@ class DINOv2Backbone(nn.Module):
     """
     Frozen DINOv2 backbone for semantically coherent patch features.
     """
-    def __init__(self, model_name='vit_large_patch14_dinov2.l14', out_dim=1024):
+    def __init__(self, model_name='vit_large_patch14_dinov2.lvd142m', out_dim=1024):
         super().__init__()
         self.model = timm.create_model(model_name, pretrained=True, num_classes=0)
         # Freeze parameters

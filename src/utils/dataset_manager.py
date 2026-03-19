@@ -48,33 +48,59 @@ class Mill19DatasetManager:
     def download_dataset(self, scenes=None):
         """
         Downloads requested scenes from Mill 19 repo.
+        Includes support for extracting .tar.gz archives.
         """
         if scenes is None:
             scenes = self.SCENES
             
         os.makedirs(self.root_dir, exist_ok=True)
         
+        # Check if the tarball already exists (even if SDK failed later)
+        tar_path = os.path.join(self.root_dir, "Mill_19.tar.gz")
+        # SDK often downloads to a 'raw' or subfolder
+        raw_tar_path = os.path.join(self.root_dir, "raw", "Mill_19.tar.gz")
+        
+        target_tar = None
+        if os.path.exists(tar_path):
+            target_tar = tar_path
+        elif os.path.exists(raw_tar_path):
+            target_tar = raw_tar_path
+            
+        if target_tar:
+            print(f"Found archive at {target_tar}. Attempting extraction...")
+            return self.extract_archive(target_tar)
+
         if not self.login():
             print("Failed to login. Please ensure AK/SK are set.")
             return False
             
-        for scene in scenes:
-            scene_path = os.path.join(self.root_dir, scene)
-            if os.path.exists(scene_path):
-                print(f"Scene {scene} already exists at {scene_path}. Skipping download.")
-                continue
-                
-            print(f"Downloading scene: {scene}...")
-            try:
-                # get() downloads the whole repo or a sub-path depends on implementation
-                # The screenshot shows: openxlab dataset get --dataset-repo OpenDataLab/Mill_19
-                # We target the specific source path inside the repo if possible
-                get(dataset_repo=self.REPO, target_path=self.root_dir)
-                print(f"Successfully downloaded {scene}.")
-            except Exception as e:
-                print(f"Failed to download {scene}: {e}")
-                return False
+        print(f"Requesting download of {self.REPO}...")
+        try:
+            get(dataset_repo=self.REPO, target_path=self.root_dir)
+            print(f"Successfully triggered download.")
+            # After download, check again for the tarball
+            if os.path.exists(raw_tar_path):
+                return self.extract_archive(raw_tar_path)
+        except Exception as e:
+            print(f"Download failed or timed out: {e}")
+            # Check if file exists anyway (SDK timeout but file present)
+            if os.path.exists(raw_tar_path):
+                print("File seems to be present regardless of timeout. Extracting...")
+                return self.extract_archive(raw_tar_path)
+            return False
         return True
+
+    def extract_archive(self, path):
+        import tarfile
+        print(f"Extracting {path} to {self.root_dir}... (This may take a while for 19GB)")
+        try:
+            with tarfile.open(path, 'r:gz') as tar:
+                tar.extractall(path=self.root_dir)
+            print("Extraction complete.")
+            return True
+        except Exception as e:
+            print(f"Extraction failed: {e}")
+            return False
 
     def preprocess(self):
         """
