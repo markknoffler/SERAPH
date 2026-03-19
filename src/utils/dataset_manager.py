@@ -93,18 +93,16 @@ class Mill19DatasetManager:
             return False
         return True
 
-    def extract_archive(self, path):
+    def extract_archive(self, path, recursive=True):
         import tarfile
-        print(f"Extracting {path} to {self.root_dir}... (This may take a while)")
+        print(f"Extracting {path} to {self.root_dir}...")
         try:
-            with tarfile.open(path, 'r:gz') as tar:
+            # Extract everything to root_dir
+            with tarfile.open(path, 'r:*') as tar:
                 tar.extractall(path=self.root_dir)
-            print("Extraction complete.")
-            # Normalization: Move extracted folders to root_dir if they are nested
-            self._normalize_folders()
-            return True
-        except Exception as e:
             print(f"Extraction of {os.path.basename(path)} complete.")
+            
+            # If this is the main archive, normalize and look for nested ones
             if recursive:
                 self._normalize_folders()
             return True
@@ -120,12 +118,16 @@ class Mill19DatasetManager:
         print(f"Normalizing folders in {self.root_dir}...")
         
         # First, check for any nested archives that need extraction
+        # Avoid recursion loops by checking if we've already extracted them
+        archives_to_extract = []
         for root, dirs, files in os.walk(self.root_dir):
             for f in files:
                 if f.endswith(('.tgz', '.tar.gz')) and f != "Mill_19.tar.gz":
-                    archive_path = os.path.join(root, f)
-                    print(f"Found nested archive: {archive_path}. Extracting...")
-                    self.extract_archive(archive_path, recursive=False)
+                    archives_to_extract.append(os.path.join(root, f))
+        
+        for archive_path in archives_to_extract:
+            print(f"Found nested archive: {archive_path}. Extracting...")
+            self.extract_archive(archive_path, recursive=False)
 
         found_any = False
         for scene in self.SCENES:
@@ -150,7 +152,10 @@ class Mill19DatasetManager:
                             # Already at destination, but might be named 'rubble-pixsfm'
                             if d != scene:
                                 target = os.path.join(self.root_dir, scene)
-                                os.rename(src, target)
+                                try:
+                                    os.rename(src, target)
+                                except:
+                                    pass
                             found_any = True
                         break # Found this scene
                 if found_any: break
@@ -193,7 +198,7 @@ class Mill19DatasetManager:
                             "scene": scene,
                             "num_images": len(imgs),
                             "image_path": "images",
-                            "intrinsic": [500.0, 500.0, self._get_img_size(os.path.join(img_dir, imgs[0]))]
+                            "intrinsic": [500.0, 500.0, self._get_img_size(os.path.join(img_target, imgs[0]))]
                         }
                         with open(metadata_file, 'w') as f:
                             json.dump(meta, f, indent=4)
